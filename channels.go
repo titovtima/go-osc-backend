@@ -97,6 +97,10 @@ func httpChannelsDataRoutes() {
 			w.WriteHeader(200)
 			return
 		}
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	})
 
@@ -132,6 +136,10 @@ func httpChannelsDataRoutes() {
 			}
 			channelsData.Auxes = auxes.Auxes
 			writeChannelsFile <- true
+			w.WriteHeader(200)
+			return
+		}
+		if r.Method == "OPTIONS" {
 			w.WriteHeader(200)
 			return
 		}
