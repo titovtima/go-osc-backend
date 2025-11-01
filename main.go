@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"sync"
 
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const deskAddr = "10.1.2.40:8001"
+const deskAddr = "10.1.3.40:8001"
 const localAddr = "0.0.0.0:9100"
 
 const httpServerAddress = "0.0.0.0:8002"
@@ -66,6 +67,9 @@ func main() {
 	// app1.SendMsg("/console/resend")
 	// app1.SendMsg("/channel/13/fader", float32(10.0))
 
+	readChannelsData()
+	httpChannelsDataRoutes()
+
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -115,7 +119,9 @@ func main() {
 						ch <- encodeWs(sendWsMessage)
 					}
 				} else {
+					storeDataLock.Lock()
 					storeData[wsMessage.Address] = wsMessage.Args
+					storeDataLock.Unlock()
 					app1.SendMsg(wsMessage.Address, float32(wsMessage.Args[0].(float64)))
 					go func() {
 						for uuid2, ws2 := range wsConns {
@@ -182,3 +188,4 @@ func encodeWs(msg WsMessage) EncodedWsMessage {
 }
 
 var storeData = make(map[string][]any)
+var storeDataLock = sync.Mutex{}
