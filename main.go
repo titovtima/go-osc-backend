@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"sync"
 
 	"time"
@@ -63,7 +64,16 @@ func main() {
 
 	go app1.ListenAndServe()
 
-	app1.SendMsg("/console/ping")
+	// app1.SendMsg("/console/ping")
+
+	maxCh := 64
+	maxAux := 32
+	for ch := 1; ch <= maxCh; ch++ {
+		for aux := 1; aux <= maxAux; aux++ {
+			app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_level/?")
+			app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_pan/?")
+		}
+	}
 	// app1.SendMsg("/console/resend")
 	// app1.SendMsg("/channel/13/fader", float32(10.0))
 
