@@ -7,7 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"regexp"
+	"os"
 	"strconv"
 	"sync"
 
@@ -15,16 +15,14 @@ import (
 
 	"github.com/crgimenes/go-osc"
 	"github.com/gorilla/websocket"
+	"gopkg.in/yaml.v3"
 )
 
-const deskAddr = "10.1.3.40:8001"
-const localAddr = "0.0.0.0:9100"
-
-const httpServerAddress = "0.0.0.0:8002"
-
 func main() {
-	localUdpAddr, _ := net.ResolveUDPAddr("udp", localAddr)
-	deskUdpAddr, _ := net.ResolveUDPAddr("udp", deskAddr)
+	config := readConfig("config/config.yaml")
+
+	localUdpAddr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:" + strconv.Itoa(config.OscListenPort))
+	deskUdpAddr, _ := net.ResolveUDPAddr("udp", config.Console.Host + ":" + strconv.Itoa(config.Console.OscRecivePort))
 
 	d1 := osc.NewStandardDispatcher()
 	app1 := osc.NewServerAndClient(d1)
@@ -41,24 +39,19 @@ func main() {
 	}()
 
 	d1.AddMsgHandler("*", func(msg *osc.Message) {
-		addrFilter1 := regexp.MustCompile(`^(/channel/13)|(/console/pong)`)
-		if addrFilter1.MatchString(msg.Address) {
-			fmt.Printf("-> %v: %v \n", localUdpAddr, msg)
+		storeDataLock.Lock()
+		storeData[msg.Address] = msg.Arguments
+		storeDataLock.Unlock()
+		
+		b, err := json.Marshal(WsMessage{msg.Address, msg.Arguments})
+		if err != nil {
+			println("error encoding to json: " + err.Error())
+			return
 		}
+		println("from osc: " + string(b))
 
-		addrFilter := regexp.MustCompile(`.*`)
-		if addrFilter.MatchString(msg.Address) {
-			storeData[msg.Address] = msg.Arguments
-			
-			b, err := json.Marshal(WsMessage{msg.Address, msg.Arguments})
-			if err != nil {
-				println("error encoding to json: " + err.Error())
-				return
-			}
-
-			for _, conn := range wsConns {
-				conn <- b
-			}
+		for _, conn := range wsConns {
+			conn <- b
 		}
 	})
 
@@ -66,16 +59,16 @@ func main() {
 
 	// app1.SendMsg("/console/ping")
 
-	maxCh := 64
-	maxAux := 32
-	for ch := 1; ch <= maxCh; ch++ {
-		for aux := 1; aux <= maxAux; aux++ {
-			app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_level/?")
-			app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_pan/?")
+	if config.Console.Series == "sd" {
+		for ch := 1; ch <= config.MaxChannel; ch++ {
+			for aux := 1; aux <= config.MaxAux; aux++ {
+				app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_level/?")
+				app1.SendMsg("/sd/Input_Channels/" + strconv.Itoa(ch) + "/Aux_Send/" + strconv.Itoa(aux) + "/send_pan/?")
+			}
 		}
+	} else if config.Console.Series == "s" {
+		app1.SendMsg("/console/resend")
 	}
-	// app1.SendMsg("/console/resend")
-	// app1.SendMsg("/channel/13/fader", float32(10.0))
 
 	readChannelsData()
 	httpChannelsDataRoutes()
@@ -91,7 +84,7 @@ func main() {
 	handleConnections := func (w http.ResponseWriter, r *http.Request)  {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Fatal(err)
+			return
 		}
 		defer ws.Close()
 
@@ -159,8 +152,9 @@ func main() {
 	}
 
 	http.HandleFunc("/", handleConnections)
-    log.Println("http server started on " + httpServerAddress)
-    err := http.ListenAndServe(httpServerAddress, nil)
+	httpHost := "0.0.0.0:" + strconv.Itoa(config.HttpServerPort)
+    log.Println("http server started on " + httpHost)
+    err := http.ListenAndServe(httpHost, nil)
     if err != nil {
         log.Fatal("ListenAndServe: ", err)
     }
@@ -199,3 +193,72 @@ func encodeWs(msg WsMessage) EncodedWsMessage {
 
 var storeData = make(map[string][]any)
 var storeDataLock = sync.Mutex{}
+
+type Config struct {
+    Console        ConsoleConfig
+    HttpServerPort int
+    OscListenPort  int
+	MaxChannel     int
+	MaxAux         int
+}
+
+type ConsoleConfig struct {
+	Series        string
+	Host          string
+	OscRecivePort int
+}
+
+func readConfig(filepath string) Config {
+    yamlFile, err := os.ReadFile(filepath)
+    if err != nil {
+        println("Error reading config: " + err.Error())
+		os.Exit(1)
+    }
+    var data map[string]any
+    err = yaml.Unmarshal(yamlFile, &data)
+    if err != nil {
+        println("Error parsing config: " + err.Error())
+		os.Exit(1)
+    }
+
+	console, ok := data["console"]
+    if !ok {
+		println("no \"console\" key in config")
+		os.Exit(1)
+	}
+	consoleMap := console.(map[string]any)
+	series := "s"
+	if s, ok := consoleMap["series"]; ok {
+		series = s.(string)
+	}
+	consoleHost, ok := consoleMap["host"]
+	if !ok {
+		println("no \"host\" key in config in console/")
+		os.Exit(1)
+	}
+	consoleOscReceivePort := 8001
+    if p, ok := consoleMap["oscReceivePort"]; ok {
+		consoleOscReceivePort = p.(int)
+	}
+
+    httpServerPort := 8002
+	if p, ok := data["httpServerPort"]; ok {
+		httpServerPort = p.(int)
+	}
+	oscListenPort := 9100
+	if p, ok := data["oscListenPort"]; ok {
+		oscListenPort = p.(int)
+	}
+	maxChannel := 64
+	if p, ok := data["maxChannel"]; ok {
+		maxChannel = p.(int)
+	}
+	maxAux := 32
+	if p, ok := data["maxAux"]; ok {
+		maxAux = p.(int)
+	}
+
+    return Config{ConsoleConfig{series, consoleHost.(string), consoleOscReceivePort}, 
+		httpServerPort, oscListenPort, maxChannel, maxAux}
+}
+
