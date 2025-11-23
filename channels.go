@@ -7,9 +7,18 @@ import (
 	"os"
 )
 
+type ChannelGroup struct {
+	Name     string    `json:"name"`
+	Order    int       `json:"order"`
+	Hidden   bool      `json:"hidden"`
+	Channels []Channel `json:"channels"`
+}
+
 type Channel struct {
 	Number int    `json:"number"`
 	Name   string `json:"name"`
+	Order  int    `json:"order"`
+	Hidden bool   `json:"hidden"`
 	Color  string `json:"color"`
 }
 
@@ -20,12 +29,12 @@ type Aux struct {
 }
 
 type ChannelsData struct {
-	Channels []Channel `json:"channels"`
-	Auxes    []Aux     `json:"auxes"`
+	Channels []ChannelGroup `json:"channels"`
+	Auxes    []Aux          `json:"auxes"`
 }
 
 var channelsDataFilePath = "channels.json"
-var channelsData = ChannelsData{[]Channel{}, []Aux{}}
+var channelsData = ChannelsData{[]ChannelGroup{}, []Aux{}}
 
 var writeChannelsFile = make(chan bool)
 
@@ -41,8 +50,8 @@ func readChannelsData() {
 
 	go func() {
 		for {
-			<- writeChannelsFile
-			b, err := json.Marshal(channelsData) 
+			<-writeChannelsFile
+			b, err := json.Marshal(channelsData)
 			if err != nil {
 				println("Error encoding to json: " + err.Error())
 				continue
@@ -66,8 +75,10 @@ func httpChannelsDataRoutes() {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "GET" {
-			channels := struct {Channels []Channel `json:"channels"`}{channelsData.Channels}
-			b, err := json.Marshal(channels) 
+			channels := struct {
+				Channels []ChannelGroup `json:"channels"`
+			}{channelsData.Channels}
+			b, err := json.Marshal(channels)
 			if err != nil {
 				println("Error encoding to json: " + err.Error())
 				http.Error(w, "Error encoding to json", 500)
@@ -85,7 +96,9 @@ func httpChannelsDataRoutes() {
 				println(err.Error())
 				return
 			}
-			var channels struct {Channels []Channel `json:"channels"`}
+			var channels struct {
+				Channels []ChannelGroup `json:"channels"`
+			}
 			err = json.Unmarshal(body, &channels)
 			if err != nil {
 				http.Error(w, "Error parsing body", 400)
@@ -108,8 +121,10 @@ func httpChannelsDataRoutes() {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "GET" {
-			auxes := struct {Auxes []Aux `json:"auxes"`}{channelsData.Auxes}
-			b, err := json.Marshal(auxes) 
+			auxes := struct {
+				Auxes []Aux `json:"auxes"`
+			}{channelsData.Auxes}
+			b, err := json.Marshal(auxes)
 			if err != nil {
 				println("Error encoding to json: " + err.Error())
 				http.Error(w, "Error encoding to json", 500)
@@ -127,7 +142,9 @@ func httpChannelsDataRoutes() {
 				println(err.Error())
 				return
 			}
-			var auxes struct {Auxes []Aux `json:"auxes"`}
+			var auxes struct {
+				Auxes []Aux `json:"auxes"`
+			}
 			err = json.Unmarshal(body, &auxes)
 			if err != nil {
 				http.Error(w, "Error parsing body", 400)
