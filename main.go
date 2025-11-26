@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	config := readConfig("config/config.yaml")
+	config := readConfig("data/config.yaml")
 
 	localUdpAddr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:" + strconv.Itoa(config.OscListenPort))
 	deskUdpAddr, _ := net.ResolveUDPAddr("udp", config.Console.Host + ":" + strconv.Itoa(config.Console.OscRecivePort))
@@ -72,6 +72,7 @@ func main() {
 
 	readChannelsData()
 	httpChannelsDataRoutes()
+	httpServeConfig(config)
 
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -195,17 +196,18 @@ var storeData = make(map[string][]any)
 var storeDataLock = sync.Mutex{}
 
 type Config struct {
-    Console        ConsoleConfig
-    HttpServerPort int
-    OscListenPort  int
-	MaxChannel     int
-	MaxAux         int
+    Console        ConsoleConfig `json:"console"`
+    HttpServerPort int           `json:"httpServerPort"`
+    OscListenPort  int           `json:"oscListenPort"`
+	MaxChannel     int           `json:"maxChannel"`
+	MaxAux         int           `json:"maxAux"`
+	BackendHost    string        `json:"backendHost"`
 }
 
 type ConsoleConfig struct {
-	Series        string
-	Host          string
-	OscRecivePort int
+	Series        string `json:"series"`
+	Host          string `json:"host"`
+	OscRecivePort int    `json:"oscReceivePort"`
 }
 
 func readConfig(filepath string) Config {
@@ -257,8 +259,28 @@ func readConfig(filepath string) Config {
 	if p, ok := data["maxAux"]; ok {
 		maxAux = p.(int)
 	}
+	backendHost := "127.0.0.1"
+	if p, ok := data["backendHost"]; ok {
+		backendHost = p.(string)
+	}
 
     return Config{ConsoleConfig{series, consoleHost.(string), consoleOscReceivePort}, 
-		httpServerPort, oscListenPort, maxChannel, maxAux}
+		httpServerPort, oscListenPort, maxChannel, maxAux, backendHost}
+}
+
+func httpServeConfig(config Config) {
+	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		// fmt.Printf("%v\n", *r)
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+		
+		b, err := json.Marshal(config)
+		if err != nil {
+			println(err.Error())
+			w.WriteHeader(500)
+			return
+		}
+		w.Write(b)
+	})
 }
 

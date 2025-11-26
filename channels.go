@@ -33,7 +33,7 @@ type ChannelsData struct {
 	Auxes    []Aux          `json:"auxes"`
 }
 
-var channelsDataFilePath = "channels.json"
+var channelsDataFilePath = "data/channels.json"
 var channelsData = ChannelsData{[]ChannelGroup{}, []Aux{}}
 
 var writeChannelsFile = make(chan bool)

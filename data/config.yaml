@@ -1,0 +1,9 @@
+console:
+  series: s # 's' or 'sd'
+  host: 10.1.3.40
+  oscReceivePort: 8100
+httpServerPort: 8002
+oscListenPort: 9100
+maxChannel: 64
+maxAux: 32
+backendHost: 10.1.3.20
