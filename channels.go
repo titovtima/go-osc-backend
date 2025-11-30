@@ -25,6 +25,9 @@ type Channel struct {
 type Aux struct {
 	Number int    `json:"number"`
 	Name   string `json:"name"`
+	Order  int    `json:"order"`
+	Hidden bool   `json:"hidden"`
+	Stereo bool   `json:"stereo"`
 	Color  string `json:"color"`
 }
 
